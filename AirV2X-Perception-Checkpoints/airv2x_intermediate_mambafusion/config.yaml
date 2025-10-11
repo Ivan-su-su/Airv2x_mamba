@@ -4,8 +4,8 @@ POINT_FEATURE_ENCODING: {
     src_feature_list: ['x', 'y', 'z', 'intensity', 'timestamp'],
 }
 CLASS_NAMES: ['car', 'truck', 'construction_vehicle', 'bus', 'trailer', 'barrier', 'motorcycle', 'bicycle', 'pedestrian', 'traffic_cone']
-POINT_CLOUD_RANGE: [-140.8, -40.0, -4.0, 140.8, 40.0, 4.0]
-VOXEL_SIZE: [0.782, 0.222, 0.25]
+POINT_CLOUD_RANGE: [-140.8, -40.0, -3.0, 140.8, 40.0, 1.0]
+VOXEL_SIZE: [0.4,0.4,0.125]
 return_abs_coords: &return_abs_coords True
 use_test_interval: &use_test_interval 1
 active_sensors: &id001
@@ -294,7 +294,7 @@ model:
           input_image: True
         
         LIDAR_INPUT_LAYER:
-          sparse_shape: [180, 180, 1]  # 减少LiDAR特征图尺寸
+          sparse_shape: [704, 200, 1]  # 减少LiDAR特征图尺寸
           d_model: [64]
           set_info: [[90, 2]]
           window_shape: [[30, 30, 1]]
@@ -317,8 +317,8 @@ model:
           LIDAR2IMAGE:
             block_start: 1
             block_end: 2
-            point_cloud_range: [-140.8, -40.0, -4.0, 140.8, 40.0, 4.0]
-            voxel_size: [0.782, 0.222, 0.25]
+            point_cloud_range: [-140.8, -40.0, -3.0, 140.8, 40.0, 1.0]
+            voxel_size: [0.4, 0.4, 0.125]
             sample_num: 1
             lidar2image_layer:
               sparse_shape: [96, 264, 6]
@@ -367,16 +367,16 @@ model:
 
       MAP_TO_BEV:
         NAME: PointPillarScatter3d
-        INPUT_SHAPE: [360, 360, 1]
+        INPUT_SHAPE: [704, 200, 1]
         NUM_BEV_FEATURES: 64
 
       BACKBONE_2D:
         NAME: BaseBEVResBackbone
-        LAYER_NUMS: [1, 1, 1] # 简化配置
-        LAYER_STRIDES: [1, 2, 2] # 第一层不下采样，保持[352, 100]
-        NUM_FILTERS: [64, 128, 128] # 通道数递增
-        UPSAMPLE_STRIDES: [1, 2, 4] # 不包含上采样，保持[352, 100]
-        NUM_UPSAMPLE_FILTERS: [128, 128, 128] # 上采样通道数
+        LAYER_NUMS: [1, 2, 2, 2] # 参考原始MambaFusion配置
+        LAYER_STRIDES: [1, 2, 2, 2] # 第1层不下采样，后续每层都下采样
+        NUM_FILTERS: [128, 128, 256, 256] # 通道数递增
+        UPSAMPLE_STRIDES: [0.5, 1, 2, 4] # 参考原始配置的上采样策略
+        NUM_UPSAMPLE_FILTERS: [128, 128, 128, 128] # 保持128通道输出
 
       DENSE_HEAD:
           CLASS_AGNOSTIC: False
@@ -474,7 +474,7 @@ model:
           lidar_range:
           - -140.8
           - -40.0
-          - -4.0
+          - -3.0
           - 140.8
           - 40
           - 1
@@ -485,12 +485,12 @@ model:
             use_norm: true
             with_distance: false
           point_pillar_scatter:
-            grid_size: [360, 360, 1]
+            grid_size: [704, 200, 32]
             num_features: 64
           voxel_size:
-          - 0.782
-          - 0.222
-          - 8.0
+          - 0.4
+          - 0.4
+          - 0.125
         modalities:
         - lidar
 
@@ -510,7 +510,7 @@ model:
           lidar_range:
           - -140.8
           - -40.0
-          - -4.00
+          - -30
           - 140.8
           - 40
           - 30
@@ -521,12 +521,12 @@ model:
             use_norm: true
             with_distance: false
           point_pillar_scatter:
-            grid_size: &id007 [360, 360, 1]
+            grid_size: &id007 [704, 200, 32]
             num_features: 64
           voxel_size:
-          - 0.782
-          - 0.222
-          - 8.0
+          - 0.4
+          - 0.4
+          - 60
         modalities:
         - lidar
 
@@ -582,16 +582,20 @@ train_params:
 postprocess:
   anchor_args:
     D: 1
-    H: 360  # 降低anchor density
-    W: 360  # 降低anchor density  
+    H: 200  # Y方向网格数
+    W: 704  # X方向网格数
     feature_stride: 2  # 设置stride为2
     cav_lidar_range:
     - -140.8
-    - -40.0
-    - -4.0
+    - -40
+    - -3
     - 140.8
-    - 40.0
-    - 4.0
+    - 40
+    - 1
+    voxel_size:
+    - 0.4
+    - 0.4
+    - 0.125
     h: 1.56
     l: 3.9
     num: 2
@@ -618,16 +622,16 @@ preprocess:
     max_voxel_test: 70000
     max_voxel_train: 32000
     voxel_size: 
-      - 0.782
-      - 0.222
-      - 8.0
+      - 0.4
+      - 0.4
+      - 0.125
   cav_lidar_range:
     - -140.8
-    - -40.0
-    - -4.0
+    - -40
+    - -3
     - 140.8
-    - 40.0
-    - 4.0
+    - 40
+    - 1
   core_method: SpVoxelPreprocessor
   ego_type: vehicle
 root_dir: /home/chubin/suyi/dataset/AirV2X-Perception/train/train

@@ -40,7 +40,7 @@ class Airv2xMambafusion(Detector3DTemplate):
                 ]
         num_anchors = 2  # 从配置文件 anchor_args.num = 2
         num_classes = 7  # 从配置文件 num_class = 7（与Where2Comm一致）
-        C = 384
+        C = 512
         self.cls_head = torch.nn.Conv2d(C, num_anchors * num_classes, kernel_size=1)
         self.reg_head = torch.nn.Conv2d(C, 7 * num_anchors, kernel_size=1)
         self.obj_head = torch.nn.Conv2d(C, num_anchors, kernel_size=1)
@@ -205,6 +205,7 @@ class Airv2xMambafusion(Detector3DTemplate):
                     available_agents.append(agent)
         
         # AirV2X需要agent循环处理，但要保持数据流一致
+        print("available_agents:",available_agents)
         for cur_module, model_name in zip(self.module_list, self.module_topology):
             if model_name in ['vfe', 'backbone_3d', 'mm_backbone', 'vtransform']:
                 # 这些模块需要agent参数，但只处理有效的agent

@@ -139,10 +139,11 @@ class IntermediateFusionDatasetAirv2x(basedataset.BaseDataset):
                 params['POINT_FEATURE_ENCODING'],
                 point_cloud_range=self.point_cloud_range
             )
-            self.grid_size = np.array([360,360,32])  # 根据VOXEL_SIZE计算得出
+            self.grid_size = np.array([704,200,32])  # 根据VOXEL_SIZE计算得出
             self.voxel_size =  (self.point_cloud_range[3:6] - self.point_cloud_range[0:3])/ self.grid_size 
             self.depth_downsample_factor = None
-            self.class_names =  ['car', 'truck', 'construction_vehicle', 'bus', 'trailer', 'barrier', 'motorcycle', 'bicycle', 'pedestrian', 'traffic_cone']
+            # self.class_names =  ['car', 'truck', 'construction_vehicle', 'bus', 'trailer', 'barrier', 'motorcycle']
+            self.class_names = ['car', 'truck', 'construction_vehicle', 'bus', 'trailer', 'barrier', 'motorcycle']
     
     def __getitem__(self, idx):
         # Default order if none specified

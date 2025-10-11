@@ -443,9 +443,6 @@ class ConvFuser(nn.Module):
             
             # 下采样到目标尺寸 (180, 180) 减少内存占用，使用adaptive_avg_pool确保尺寸一致
             print("mm_bev.shape",mm_bev.shape)
-            if mm_bev.shape[2] != 180 or mm_bev.shape[3] != 180:
-                mm_bev = F.adaptive_avg_pool2d(mm_bev, (180, 180))
-            
             batch_dict['spatial_features'] = mm_bev
             return batch_dict
         

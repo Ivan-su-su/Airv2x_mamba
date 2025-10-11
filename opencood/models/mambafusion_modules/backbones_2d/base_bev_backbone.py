@@ -85,7 +85,6 @@ class BaseBEVBackbone(nn.Module):
                 spatial_features
         Returns:
         """
-        import pdb; pdb.set_trace()
         spatial_features = data_dict['spatial_features']
         ups = []
         ret_dict = {}
@@ -107,7 +106,6 @@ class BaseBEVBackbone(nn.Module):
 
         if len(self.deblocks) > len(self.blocks):
             x = self.deblocks[-1](x)
-        import pdb; pdb.set_trace()
         data_dict['spatial_features_2d'] = x
 
         return data_dict
@@ -325,6 +323,7 @@ class BaseBEVResBackbone(nn.Module):
         Returns:
         """
         spatial_features = data_dict['spatial_features']
+        
         ups = []
         ret_dict = {}
         x = spatial_features # torch.Size([2, 128, 360, 360])
@@ -345,7 +344,6 @@ class BaseBEVResBackbone(nn.Module):
 
         if len(self.deblocks) > len(self.blocks):
             x = self.deblocks[-1](x)
-
         data_dict['spatial_features_2d'] = x # torch.Size([2, 512, 360, 360])
 
         return data_dict

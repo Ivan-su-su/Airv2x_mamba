@@ -155,10 +155,10 @@ class DynamicVoxelVFE(VFETemplate):
 
         # generate voxel coordinates
         unq_coords = unq_coords.int()
-        voxel_coords = torch.stack((unq_coords // self.scale_xyz,
-                                    (unq_coords % self.scale_xyz) // self.scale_yz,
-                                    (unq_coords % self.scale_yz) // self.scale_z,
-                                    unq_coords % self.scale_z), dim=1)
+        voxel_coords = torch.stack((unq_coords // scale_xyz,
+                                    (unq_coords % scale_xyz) // scale_yz,
+                                    (unq_coords % scale_yz) // scale_z,
+                                    unq_coords % scale_z), dim=1)
         voxel_coords = voxel_coords[:, [0, 3, 2, 1]]
         
         # 修正batch索引：将所有voxel的batch索引设置为0

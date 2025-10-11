@@ -189,10 +189,11 @@ class FlattenedWindowMapping(nn.Module):
         self.coef = 2 if self.use_expand else 1
         self.use_divide_token = use_divide_token
         if self.win_version == 'v4':
-
+            # 注意：v4版本的sparse_shape_list需要根据实际的grid_size动态设置
+            # 这里保持原有的硬编码值，但建议在实际使用时根据grid_size动态计算
             self.shift_list = [[[0, 0, 0], [(self.window_shape[0] + 1) // 2, (self.window_shape[1] + 1) // 2, 0]]]
             self.window_shape = [[self.window_shape, self.window_shape]]
-            self.sparse_shape_list = [[96, 264, 6]]
+            self.sparse_shape_list = [[96, 264, 6]]  # 硬编码值，需要根据实际grid_size调整
             self.set_info = [[self.group_size, 2]]
             self.num_shifts = [2]
             self.model_cfg = {'expand_max_voxels': 30}
@@ -1443,8 +1444,9 @@ class LION3DBackboneOneStride(nn.Module):
         batch_dict[agent]['voxel_coords'] = x.indices
         # assert batch_dict['voxel_coords'][:, 1].max() == 0 and batch_dict['voxel_coords'][:, 1].min() == 0
         assert batch_dict[agent]['voxel_coords'][:, 0].max() == batch_size - 1 and batch_dict[agent]['voxel_coords'][:, 0].min() == 0
-        assert batch_dict[agent]['voxel_coords'][:, 2].max() < 360 and batch_dict[agent]['voxel_coords'][:, 2].min() >= 0
-        assert batch_dict[agent]['voxel_coords'][:, 3].max() < 360 and batch_dict[agent]['voxel_coords'][:, 3].min() >= 0
+        # 使用动态的sparse_shape进行断言检查
+        assert batch_dict[agent]['voxel_coords'][:, 2].max() < self.sparse_shape[1] and batch_dict[agent]['voxel_coords'][:, 2].min() >= 0
+        assert batch_dict[agent]['voxel_coords'][:, 3].max() < self.sparse_shape[2] and batch_dict[agent]['voxel_coords'][:, 3].min() >= 0
         batch_dict[agent]['pillar_features'] = batch_dict[agent]['voxel_features'] = x.features
         return batch_dict
 

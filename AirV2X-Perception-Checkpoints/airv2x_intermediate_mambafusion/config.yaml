@@ -1,0 +1,636 @@
+POINT_FEATURE_ENCODING: {
+    encoding_type: absolute_coordinates_encoding,
+    used_feature_list: ['x', 'y', 'z', 'intensity', 'timestamp'],
+    src_feature_list: ['x', 'y', 'z', 'intensity', 'timestamp'],
+}
+CLASS_NAMES: ['car', 'truck', 'construction_vehicle', 'bus', 'trailer', 'barrier', 'motorcycle', 'bicycle', 'pedestrian', 'traffic_cone']
+POINT_CLOUD_RANGE: [-140.8, -40.0, -4.0, 140.8, 40.0, 4.0]
+VOXEL_SIZE: [0.782, 0.222, 0.25]
+return_abs_coords: &return_abs_coords True
+use_test_interval: &use_test_interval 1
+active_sensors: &id001
+- lidar
+bevcam_fov: 110
+collaborators: &id002
+- vehicle
+- rsu
+- drone
+data_augment:
+- ALONG_AXIS_LIST:
+  - x
+  NAME: random_world_flip
+- NAME: random_world_rotation
+  WORLD_ROT_ANGLE:
+  - -0.78539816
+  - 0.78539816
+- NAME: random_world_scaling
+  WORLD_SCALE_RANGE:
+  - 0.95
+  - 1.05
+device: cuda
+dynamic_class: 7
+ego_type: vehicle
+name: airv2x_intermediate_mambafusion
+tag: default
+yaml_parser: load_airv2x_params
+task: det
+optimizer:
+  args:
+    eps: 1.0e-10
+    weight_decay: 0.0001
+  core_method: Adam
+  lr: 0.0015
+fusion:
+  args:
+    drone_data_aug_conf: &id003
+      H: 720
+      W: 1280
+      bot_pct_lim:
+      - 0.0
+      - 0.05
+      # final_dim:
+      # - 360
+      # - 640 -- origin
+      final_dim:
+      - 256
+      - 704
+      rand_flip: false
+      resize_lim:
+      - 0.38
+      - 0.55
+      resize_lim_mamba:
+      - 0.48
+      - 0.48
+      rot_lim:
+      - -3.6
+      - 3.6
+    drone_grid_conf: &id004
+      ddiscr:
+      - 6
+      - 150
+      - 144
+      mode: UD
+      xbound:
+      - -140.8
+      - 140.8
+      - 0.4
+      ybound:
+      - -40
+      - 40
+      - 0.4
+      zbound:
+      - -150
+      - -6
+      - 144
+    proj_first: true
+    rsu_data_aug_conf: &id005
+      H: 720
+      W: 1280
+      bot_pct_lim:
+      - 0.0
+      - 0.05
+      # final_dim:
+      # - 360
+      # - 640 -- origin
+      final_dim:
+      - 256
+      - 704
+      rand_flip: false
+      resize_lim:
+      - 0.38
+      - 0.55
+      resize_lim_mamba:
+      - 0.48
+      - 0.48
+      rot_lim:
+      - 0
+      - 0
+    rsu_grid_conf: &id006
+      ddiscr:
+      - 2
+      - 50
+      - 48
+      mode: LID
+      xbound:
+      - -140.8
+      - 140.8
+      - 0.4
+      ybound:
+      - -40
+      - 40
+      - 0.4
+      zbound:
+      - -30
+      - 30
+      - 60.0
+    veh_data_aug_conf: &id008
+      H: 720
+      W: 1280
+      bot_pct_lim:
+      - 0.0
+      - 0.05
+      # final_dim:
+      # - 360
+      # - 640 -- origin
+      final_dim:
+      - 256
+      - 704
+      rand_flip: false
+      resize_lim: #TODO
+      - 0.38
+      - 0.55
+      resize_lim_mamba:
+      - 0.48
+      - 0.48
+      rot_lim:
+      - 0
+      - 0
+    veh_grid_conf: &id009
+      ddiscr:
+      - 2
+      - 50
+      - 48
+      mode: LID
+      xbound:
+      - -140.8
+      - 140.8
+      - 0.4
+      ybound:
+      - -40
+      - 40
+      - 0.4
+      zbound:
+      - -10
+      - 10
+      - 20.0
+  core_method: IntermediateFusionDatasetAirv2x
+loss:
+  det:
+    args:
+      cls_weight: 1.0
+      num_class: 7
+      reg: 2.0
+    core_method: point_pillar_loss_multiclass
+  seg:
+    args:
+      d_coe: 2.0
+      d_weights:
+      - 200.0
+      - 200.0
+      - 75.0
+      - 200.0
+      - 200.0
+      - 200.0
+      l_weights: 8.0
+      s_coe: 0.0
+      s_weights: 50.0
+      seg_branch: both
+    core_method: vanilla_seg_loss
+lr_scheduler:
+  core_method: multistep
+  gamma: 0.1
+  step_size:
+  - 10
+  - 25
+  - 40
+model:
+    core_method: airv2x_mambafusion
+    args:
+      active_sensors: *id001
+      anchor_number: 2
+      backbone_fix: false
+      cav_range: &id014
+      - -140.8
+      - -40
+      - -3
+      - 140.8
+      - 40
+      - 1
+      collaborators: *id002
+      device: cuda
+      dynamic_class: 7
+      ego_type: vehicle
+      head_dim: 256
+      max_cav: &id016
+        drone: 5
+        rsu: 5
+        vehicle: 5
+      num_class: 7
+      obj_head: true
+      outC: 256
+      proj_first: true
+      seg_branch: both
+      seg_hw: 512
+      seg_res: 0.25
+      static_class: 3
+      supervise_single: false
+      task: det
+      train: true
+      NAME: MambaFusion
+      USE_VOXEL_MAMBA: True
+      VFE:
+          NAME: DynamicVoxelVFE
+          RETURN_ABS_COORDS: *return_abs_coords
+          WITH_DISTANCE: False
+          USE_ABSLOTE_XYZ: True
+          USE_NORM: True
+          NUM_FILTERS: [ 64, 64 ]
+      BACKBONE_3D:
+          NAME: LION3DBackboneOneStride
+          USE_DOW5: True
+          # DOW5_DIFF: False
+          RETURN_ABS_COORDS: *return_abs_coords
+          FEATURE_DIM: 64
+          LAYER_DIM: [128, 128, 128, 128]
+          LAYER_DIM: [64,64,64,64]
+          NUM_LAYERS: 4
+          DEPTHS: [2, 2, 2, 2]
+          LAYER_DOWN_SCALES: [[[2, 2, 2], [2, 2, 2]], [[2, 2, 2], [2, 2, 2]], [[2, 2, 2], [2, 2, 2]], [[2, 2, 2], [2, 2, 2]]]
+          WINDOW_SHAPE: [[13, 13, 32], [13, 13, 16], [13, 13, 8], [13, 13, 4]]
+          GROUP_SIZE: [4096, 2048, 1024, 512]
+          DIRECTION: ['x', 'y']
+          DIFF_SCALE: 0.2
+          DIFFUSION:  True #False #True
+          SHIFT: True
+          OPERATOR:
+            NAME: 'Mamba'
+            CFG:
+              d_state: 8  # 减少状态维度，降低参数量
+              d_conv: 2   # 减少卷积核大小
+              expand: 1   # 减少扩展因子
+              drop_path: 0.1  # 减少dropout
+
+      
+      MM_BACKBONE:
+        NAME: MambaFusion
+        VIS_TAG: False
+        use_test_interval: *use_test_interval
+        RETURN_ABS_COORDS: *return_abs_coords
+        USE_WINMAMBA: True
+        USE_ALL_MAMBA: True
+        AGENTS_AS_VIEWS: True
+        USE_MAMBA_INTER2: True
+        EXTRINSICS_IS_LIDAR_TO_CAM: True
+        USE_VMAMBA_PRETRAIN: True
+        AGENT_INTERACT: True
+        EMBED_TYPE: 'fixed'
+
+        PATCH_EMBED:
+          in_channels: 3
+          image_size: [256, 704]
+          embed_dims: 64
+          patch_size: 8 
+          patch_norm: True 
+          norm_cfg: {'type': 'LN'}
+
+        IMAGE_INPUT_LAYER:
+          sparse_shape: [32, 88, 1]
+          d_model: [64]
+          # set_info: [[90, 3]]
+          set_info: [[90, 2]]
+          window_shape: [[30, 30, 1]]
+          hybrid_factor: [1, 1, 1] # x, y, z
+          shifts_list: [[[0, 0, 0], [15, 15, 0]]]
+          input_image: True
+        
+        LIDAR_INPUT_LAYER:
+          sparse_shape: [180, 180, 1]  # 减少LiDAR特征图尺寸
+          d_model: [64]
+          set_info: [[90, 2]]
+          window_shape: [[30, 30, 1]]
+          hybrid_factor: [1, 1, 1] # x, y, z
+          shifts_list: [[[0, 0, 0], [15, 15, 0]]]
+        
+        set_info: [[90, 2]]
+        d_model: [64]
+        nhead: [8]
+        dim_feedforward: [256]
+        dropout: 0.0
+        activation: gelu
+        # checkpoint_blocks: [0,1,2] # here can save 50% CUDA memory with marginal speed drop
+        checkpoint_blocks: [0, 1] # here can save 50% CUDA memory with marginal speed drop
+        layer_cfg: {'use_bn': False, 'split_ffn': True, 'split_residual': True}
+
+        # fuse backbone config
+        FUSE_BACKBONE:
+
+          LIDAR2IMAGE:
+            block_start: 1
+            block_end: 2
+            point_cloud_range: [-140.8, -40.0, -4.0, 140.8, 40.0, 4.0]
+            voxel_size: [0.782, 0.222, 0.25]
+            sample_num: 1
+            lidar2image_layer:
+              sparse_shape: [96, 264, 6]
+              d_model: [128]
+              set_info: [[90, 1]]
+              window_shape: [[30, 30, 1]]
+              hybrid_factor: [1, 1, 1]
+              shifts_list: [[[0, 0, 0], [15, 15, 0]]]
+              expand_max_voxels: 30
+        # out_indices: [0, 1, 2]
+        out_indices: [0, 1]
+      
+      NECK:
+        NAME: GeneralizedLSSFPN
+        # IN_CHANNELS: [128, 128, 128]
+        IN_CHANNELS: [64, 64]
+        OUT_CHANNELS: 256
+        START_LEVEL: 0
+        END_LEVEL: -1
+        NUM_OUTS: 4
+        USE_BIAS: True
+        ALIGN_CORNERS: True
+
+      VTRANSFORM: 
+        NAME: LSSTransform_Lite
+        USE_MAMBA: True
+        MAMBA_DOWNSAMPLE_SCALE: 2
+        # USE_MULTI_BLOCK: True
+        IMAGE_SIZE: [256,704]
+        IN_CHANNEL: 256
+        OUT_CHANNEL: 80
+        FEATURE_SIZE: [32,88]
+        XBOUND: [-140.8, 140.8, 0.782]
+        YBOUND: [-40.0, 40.0, 0.222]
+        ZBOUND: [-4.0, 4.0, 8.0]
+        DBOUND: [1.0, 60.0, 0.5]
+        DOWNSAMPLE: 1
+
+      FUSER:
+        NAME: ConvFuser
+        # USE_MERGE_AFTER: True
+        # USE_VMAMBA: True
+        IN_CHANNEL: 64
+        OUT_CHANNEL: 128
+        LIDAR_ONLY: True
+
+      MAP_TO_BEV:
+        NAME: PointPillarScatter3d
+        INPUT_SHAPE: [360, 360, 1]
+        NUM_BEV_FEATURES: 64
+
+      BACKBONE_2D:
+        NAME: BaseBEVResBackbone
+        LAYER_NUMS: [1, 1, 1] # 简化配置
+        LAYER_STRIDES: [1, 2, 2] # 第一层不下采样，保持[352, 100]
+        NUM_FILTERS: [64, 128, 128] # 通道数递增
+        UPSAMPLE_STRIDES: [1, 2, 4] # 不包含上采样，保持[352, 100]
+        NUM_UPSAMPLE_FILTERS: [128, 128, 128] # 上采样通道数
+
+      DENSE_HEAD:
+          CLASS_AGNOSTIC: False
+          NAME: TransFusionHead
+          QUERY_RADIUS: 20 
+          QUERY_LOCAL: True
+          USE_BIAS_BEFORE_NORM: True
+
+          NUM_PROPOSALS: 200
+          HIDDEN_CHANNEL: 128
+          NUM_CLASSES: 7
+          NUM_HEADS: 8
+          NMS_KERNEL_SIZE: 3
+          FFN_CHANNEL: 256
+          DROPOUT: 0.1
+          BN_MOMENTUM: 0.1
+          ACTIVATION: relu
+
+
+          NUM_HM_CONV: 2
+          SEPARATE_HEAD_CFG:
+              HEAD_ORDER: ['center', 'height', 'dim', 'rot', 'vel','iou'] #TODO
+              HEAD_DICT: { #TODO
+                  'center': {'out_channels': 2, 'num_conv': 2},
+                  'height': {'out_channels': 1, 'num_conv': 2},
+                  'dim': {'out_channels': 3, 'num_conv': 2},
+                  'rot': {'out_channels': 2, 'num_conv': 2},
+                  'vel': {'out_channels': 2, 'num_conv': 2},
+                  'iou': {'out_channels': 1, 'num_conv': 2}
+              }
+        
+          TARGET_ASSIGNER_CONFIG:
+              FEATURE_MAP_STRIDE: 2
+              DATASET: airv2xDataset
+              GAUSSIAN_OVERLAP: 0.1
+              MIN_RADIUS: 2
+              HUNGARIAN_ASSIGNER:
+                  cls_cost: {'gamma': 2.0, 'alpha': 0.25, 'weight': 0.15}
+                  reg_cost: {'weight': 0.25}
+                  iou_cost: {'weight': 0.25}
+          
+          LOSS_CONFIG:
+              LOSS_WEIGHTS: {
+                      'cls_weight': 1.0,
+                      'bbox_weight': 0.25,
+                      'hm_weight': 1.0,
+                      'iou_weight': 0.5,
+                      'iou_reg_weight': 0.5,
+                      'code_weights': [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.2, 0.2]
+                  }
+              LOSS_CLS:
+                  use_sigmoid: True
+                  gamma: 2.0
+                  alpha: 0.25
+              LOSS_IOU: True
+              LOSS_IOU_REG: True
+            
+          POST_PROCESSING:
+              SCORE_THRESH: 0.0
+              POST_CENTER_RANGE: [-140.8, -40.0, -4.0, 140.8, 40.0, 4.0]
+              USE_IOU_TO_RECTIFY_SCORE: True 
+              IOU_RECTIFIER: [0.5]
+          NMS_CONFIG:
+              NMS_TYPE: nms_gpu
+              NMS_THRESH: 0.2
+              NMS_PRE_MAXSIZE: 1000
+              NMS_POST_MAXSIZE: 100
+              SCORE_THRES: 0.
+            
+
+      POST_PROCESSING:
+          RECALL_THRESH_LIST: [0.3, 0.5, 0.7]
+          SCORE_THRESH: 0.1
+          OUTPUT_RAW_SCORE: False
+          EVAL_METRIC: kitti
+          NMS_CONFIG:
+              MULTI_CLASSES_NMS: True
+              NMS_TYPE: nms_gpu
+              NMS_THRESH: 0.2
+              NMS_PRE_MAXSIZE: 1000
+              NMS_POST_MAXSIZE: 83
+      vehicle:
+        cam:
+          bevout_feature: 64
+          camera_encoder: EfficientNet
+          data_aug_conf: *id008
+          depth_supervision: false
+          grid_conf: *id009
+          img_downsample: 8
+          img_features: 64
+          use_depth_gt: true
+        lidar:
+          backbone_fix: false
+          compression: 0
+          lidar_range:
+          - -140.8
+          - -40.0
+          - -4.0
+          - 140.8
+          - 40
+          - 1
+          pillar_vfe:
+            num_filters:
+            - 64
+            use_absolute_xyz: true
+            use_norm: true
+            with_distance: false
+          point_pillar_scatter:
+            grid_size: [360, 360, 1]
+            num_features: 64
+          voxel_size:
+          - 0.782
+          - 0.222
+          - 8.0
+        modalities:
+        - lidar
+
+      rsu:
+        cam:
+          bevout_feature: 64
+          camera_encoder: EfficientNet
+          data_aug_conf: *id005
+          depth_supervision: false
+          grid_conf: *id006
+          img_downsample: 8
+          img_features: 64
+          use_depth_gt: true
+        lidar:
+          backbone_fix: false
+          compression: 0
+          lidar_range:
+          - -140.8
+          - -40.0
+          - -4.00
+          - 140.8
+          - 40
+          - 30
+          pillar_vfe:
+            num_filters:
+            - 64
+            use_absolute_xyz: true
+            use_norm: true
+            with_distance: false
+          point_pillar_scatter:
+            grid_size: &id007 [360, 360, 1]
+            num_features: 64
+          voxel_size:
+          - 0.782
+          - 0.222
+          - 8.0
+        modalities:
+        - lidar
+
+      drone:
+        cam:
+          bevout_feature: 64
+          camera_encoder: EfficientNet
+          data_aug_conf: *id003
+          depth_supervision: false
+          grid_conf: *id004
+          img_downsample: 8
+          img_features: 64
+          use_depth_gt: true
+        lidar:
+          backbone_fix: false
+          compression: 0
+          lidar_range:
+          - -140.8
+          - -40
+          - -150
+          - 140.8
+          - 40
+          - -6
+          pillar_vfe:
+            num_filters:
+            - 64
+            use_absolute_xyz: true
+            use_norm: true
+            with_distance: false
+          point_pillar_scatter:
+            grid_size: *id007
+            num_features: 64
+          voxel_size:
+          - 0.4
+          - 0.4
+          - 144
+        modalities:
+        - lidar
+train_params:
+  batch_size: 1
+  epoches: 50
+  eval_freq: 2
+  max_cav: 
+    drone: 5
+    rsu: 5
+    vehicle: 5
+  save_freq: 1
+  # 内存优化配置 - 解决第二轮OOM
+  mixed_precision: true  # 启用混合精度训练，减少50%内存占用
+  gradient_accumulation_steps: 4  # 增加梯度累积步数，减少内存峰值
+  empty_cache_freq: 10  # 每10步安全清理GPU缓存
+  max_grad_norm: 1.0  # 梯度裁剪
+postprocess:
+  anchor_args:
+    D: 1
+    H: 360  # 降低anchor density
+    W: 360  # 降低anchor density  
+    feature_stride: 2  # 设置stride为2
+    cav_lidar_range:
+    - -140.8
+    - -40.0
+    - -4.0
+    - 140.8
+    - 40.0
+    - 4.0
+    h: 1.56
+    l: 3.9
+    num: 2
+    r:
+    - 0
+    - 90
+    vd: 4
+    vh: 0.4
+    vw: 0.4
+    w: 1.6
+  core_method: VoxelPostprocessor
+  ego_type: vehicle
+  max_num: 300
+  nms_thresh: 0.15
+  order: hwl
+  target_args:
+    neg_threshold: 0.45
+    obj_threshold: 0.2
+    pos_threshold: 0.6
+    score_threshold: 0.2
+preprocess:
+  args:
+    max_points_per_voxel: 32
+    max_voxel_test: 70000
+    max_voxel_train: 32000
+    voxel_size: 
+      - 0.782
+      - 0.222
+      - 8.0
+  cav_lidar_range:
+    - -140.8
+    - -40.0
+    - -4.0
+    - 140.8
+    - 40.0
+    - 4.0
+  core_method: SpVoxelPreprocessor
+  ego_type: vehicle
+root_dir: /home/chubin/suyi/dataset/AirV2X-Perception/train/train
+validate_dir: /home/chubin/suyi/dataset/AirV2X-Perception/val/val
+test_dir: /home/chubin/suyi/dataset/AirV2X-Perception/test/test
+    

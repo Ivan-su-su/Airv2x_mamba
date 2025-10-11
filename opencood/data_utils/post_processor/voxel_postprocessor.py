@@ -604,8 +604,8 @@ class VoxelPostprocessor(BasePostprocessor):
         boxes3d = torch.zeros_like(deltas)
 
         if deltas.is_cuda:
-            anchors = anchors.cuda()
-            boxes3d = boxes3d.cuda()
+            anchors = anchors.to(deltas.device)
+            boxes3d = boxes3d.to(deltas.device)
 
         # (W*L*2, 7)
         anchors_reshaped = anchors.view(-1, 7).float()
@@ -703,6 +703,11 @@ class VoxelPostprocessor(BasePostprocessor):
             assert cav_id in output_dict
             transformation_matrix = cav_content["transformation_matrix"]
             anchor_box = cav_content["anchor_box"]
+            
+            # Ensure tensors are on the same device as model output
+            if output_dict[cav_id]["obj"].is_cuda:
+                transformation_matrix = transformation_matrix.to(output_dict[cav_id]["obj"].device)
+                anchor_box = anchor_box.to(output_dict[cav_id]["obj"].device)
             
             # objectness
             obj_preds = output_dict[cav_id]["obj"]  # [1, A, H, W]

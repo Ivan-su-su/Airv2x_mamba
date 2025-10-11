@@ -85,7 +85,6 @@ class Communication(nn.Module):
         Args:
             batch_confidence_maps: [(L1, H, W), (L2, H, W), ...]
         """
-
         _, _, H, W = batch_confidence_maps[0].shape
         # print("batch_confidence_maps shape:", [m.shape for m in batch_confidence_maps])
 
@@ -239,6 +238,7 @@ class Where2comm(nn.Module):
                 # 2. Split the features
                 # split_x: [(L1, C, H, W), (L2, C, H, W), ...]
                 # For example [[2, 256, 48, 176], [1, 256, 48, 176], ...]
+                
                 batch_node_features = self.regroup(x, record_len)
 
                 # 3. Fusion
@@ -253,7 +253,7 @@ class Where2comm(nn.Module):
                     ups.append(backbone.deblocks[i](x_fuse))
                 else:
                     ups.append(x_fuse)
-
+            
             if len(ups) > 1:
                 x_fuse = torch.cat(ups, dim=1)
             elif len(ups) == 1:

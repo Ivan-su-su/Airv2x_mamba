@@ -12,7 +12,7 @@ import numpy as np
 import yaml
 
 
-def load_yaml(file, opt=None):
+def load_yaml(file, opt=None, model_dir = None):
     """
     Load yaml file and return a dictionary.
 
@@ -28,10 +28,12 @@ def load_yaml(file, opt=None):
     param : dict
         A dictionary that contains defined parameters.
     """
-    if opt and opt.model_dir:
+    if model_dir:
+        file = os.path.join(model_dir, "config.yaml")
+    elif opt and opt.model_dir:
         file = os.path.join(opt.model_dir, 
                             opt.config_file if hasattr(opt, "config_file") else "config.yaml")
-
+        
     stream = open(file, "r")
     loader = yaml.Loader
     loader.add_implicit_resolver(

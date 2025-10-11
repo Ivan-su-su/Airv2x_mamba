@@ -98,7 +98,20 @@ def inference_early_fusion(batch_data, model, dataset):
     output_dict = OrderedDict()
     cav_content = batch_data["ego"]
     # print('type(cav_content) is ',type(cav_content))
-    output_dict["ego"] = model(cav_content)
+    model_output = model(cav_content)
+    output_dict["ego"] = model_output
+
+    # 检查模型是否直接返回了预测结果（Airv2xMambafusion的情况）
+    if isinstance(model_output, dict) and 'pred_box_tensor' in model_output:
+        pred_box_tensor = model_output['pred_box_tensor']
+        pred_score = model_output['pred_score']
+        pred_labels = model_output['pred_labels']
+        pred_boxes3d = model_output['pred_boxes3d']
+        
+        # 生成gt_box_tensor
+        gt_box_tensor = dataset.post_processor.generate_gt_bbx(batch_data["ego"][0])
+        
+        return pred_box_tensor, pred_score, gt_box_tensor, pred_boxes3d
 
     try:
         pred_box_tensor, pred_score, gt_box_tensor = dataset.post_process(
@@ -350,7 +363,6 @@ def combine_stat_by_scenarios(result_stat_dict):
         0.7: {"tp": [], "fp": [], "gt": 0, "score": []},
     }
     combined_stat = defaultdict(result_stat_init)
-
     for scenario, stat in result_stat_dict.items():
         if scenario not in scenarios_params:
             print(f"Warning: scenario {scenario} not in scenarios_params, skipping...")

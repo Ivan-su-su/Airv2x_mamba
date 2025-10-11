@@ -141,6 +141,7 @@ def parse_timestamp_agent(agent_path: str) -> Dict[str, Any]:
     """
     info = OrderedDict()
     metadata_path = os.path.join(agent_path, "metadata.pkl")
+    # metadata_path = os.path.join(agent_path, "objects.pkl")
     metadata = load_pickle(metadata_path)
     # info["metadata"] = metadata
     agent_type = metadata["agent_type"]

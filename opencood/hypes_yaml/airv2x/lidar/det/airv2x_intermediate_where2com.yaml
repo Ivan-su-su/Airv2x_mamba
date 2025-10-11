@@ -16,7 +16,7 @@ bevcam_fov: 110
 yaml_parser: "load_airv2x_params" # add support for airv2x
 train_params:
   batch_size: &batch_size 1
-  epoches: 50
+  epoches: 20
   eval_freq: 2
   save_freq: 1
   max_cav: &max_cav
@@ -32,9 +32,9 @@ train: &train True
 # Dataset #
 ###########
 
-root_dir: 'dataset/airv2x/train'
-validate_dir: 'dataset/airv2x/val'
-test_dir: 'dataset/airv2x/test'
+root_dir: '/home/chubin/suyi/dataset/AirV2X-Perception/train/train'
+validate_dir: '/home/chubin/suyi/dataset/AirV2X-Perception/val/val'
+test_dir: '/home/chubin/suyi/dataset/AirV2X-Perception/test/test'
 num_class: &num_class 7
 num_anchor: &num_anchor 2
 

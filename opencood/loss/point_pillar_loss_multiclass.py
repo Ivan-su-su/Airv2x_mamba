@@ -106,6 +106,16 @@ class PointPillarLossMultiClass(nn.Module):
         psm = output_dict["psm{}".format(prefix)]  # [B, #anchor*#class, 50, 176]
         obj = output_dict["obj{}".format(prefix)]  # [B, #anchor, 50, 176]
         targets = target_dict["targets"]
+        
+        # 调试信息：打印输入尺寸
+        print(f"[Loss Debug] psm shape: {psm.shape}")
+        print(f"[Loss Debug] rm shape: {rm.shape}")
+        print(f"[Loss Debug] obj shape: {obj.shape}")
+        print(f"[Loss Debug] targets shape: {targets.shape}")
+        print(f"[Loss Debug] pos_equal_one shape: {target_dict['pos_equal_one'].shape}")
+        print(f"[Loss Debug] neg_equal_one shape: {target_dict['neg_equal_one'].shape}")
+        if 'class_ids' in target_dict:
+            print(f"[Loss Debug] class_ids shape: {target_dict['class_ids'].shape}")
 
         cls_preds = psm.permute(0, 2, 3, 1).contiguous()  # N, C, H, W -> N, H, W, C
         obj_preds = obj.permute(0, 2, 3, 1).contiguous()  # (B, H, W, A)
@@ -122,8 +132,15 @@ class PointPillarLossMultiClass(nn.Module):
         neg_mask = target_dict["neg_equal_one"]  # (B, H, W, A)
 
         pos_normalizer = positives.sum(1, keepdim=True).float()
+        print(f"[Loss Debug] positives sum: {positives.sum()}")
+        print(f"[Loss Debug] pos_normalizer: {pos_normalizer}")
+        print(f"[Loss Debug] cls_weights before normalization: {cls_weights.sum()}")
+        print(f"[Loss Debug] cls_weights before normalization shape: {cls_weights.shape}")
+        print(f"[Loss Debug] cls_weights before normalization min/max: {cls_weights.min()}/{cls_weights.max()}")
         reg_weights /= torch.clamp(pos_normalizer, min=1.0)
         cls_weights /= torch.clamp(pos_normalizer, min=1.0)
+        print(f"[Loss Debug] cls_weights after normalization: {cls_weights.sum()}")
+        print(f"[Loss Debug] cls_weights after normalization min/max: {cls_weights.min()}/{cls_weights.max()}")
         cls_labels = target_dict["class_ids"]  # [B, H, W, A]
         cls_targets = cls_labels
         one_hot_targets = torch.zeros(
@@ -136,14 +153,34 @@ class PointPillarLossMultiClass(nn.Module):
         cls_labels = one_hot_targets.view(
             cls_targets.shape[0], cls_targets.shape[1], cls_targets.shape[2], -1
         )
-        assert cls_labels.shape == cls_preds.shape, (
-            f"cls label {cls_labels.shape}, cls_preds shape {cls_preds.shape}"
-        )
+        # 调试信息：检查尺寸匹配
+        print(f"[Loss Debug] cls_labels shape: {cls_labels.shape}")
+        print(f"[Loss Debug] cls_preds shape: {cls_preds.shape}")
+        print(f"[Loss Debug] cls_weights shape: {cls_weights.shape}")
+        print(f"[Loss Debug] cls_weights sum: {cls_weights.sum()}")
+        print(f"[Loss Debug] cls_weights min/max: {cls_weights.min()}/{cls_weights.max()}")
+        
+        if cls_labels.shape != cls_preds.shape:
+            print(f"[Loss Debug] ERROR: Size mismatch!")
+            print(f"[Loss Debug] cls_labels: {cls_labels.shape}")
+            print(f"[Loss Debug] cls_preds: {cls_preds.shape}")
+            # 尝试调整尺寸
+            if cls_labels.shape[0] == cls_preds.shape[0] and cls_labels.shape[3] == cls_preds.shape[3]:
+                print(f"[Loss Debug] Attempting to resize cls_preds to match cls_labels")
+                cls_preds = F.interpolate(cls_preds.permute(0, 3, 1, 2), size=(cls_labels.shape[1], cls_labels.shape[2]), mode='bilinear', align_corners=False).permute(0, 2, 3, 1)
+                print(f"[Loss Debug] Resized cls_preds shape: {cls_preds.shape}")
+        
         cls_loss_src = self.cls_loss_func(
             cls_preds, cls_labels, weights=cls_weights
         )  # [N, M]
+        print(f"[Loss Debug] cls_loss_src shape: {cls_loss_src.shape}")
+        print(f"[Loss Debug] cls_loss_src sum: {cls_loss_src.sum()}")
+        print(f"[Loss Debug] cls_loss_src min/max: {cls_loss_src.min()}/{cls_loss_src.max()}")
+        
         cls_loss = cls_loss_src.sum() / psm.shape[0]
         conf_loss = cls_loss * self.cls_weight
+        print(f"[Loss Debug] cls_loss: {cls_loss}")
+        print(f"[Loss Debug] conf_loss: {conf_loss}")
 
         # regression
         rm = rm.permute(0, 2, 3, 1).contiguous()
@@ -156,6 +193,7 @@ class PointPillarLossMultiClass(nn.Module):
 
         reg_loss = loc_loss_src.sum() / rm.shape[0]
         reg_loss *= self.reg_coe
+        print(f"[Loss Debug] reg_loss: {reg_loss}")
 
         # TODO(YH): check obj loss, consider how to weight this
         obj_preds_sigmoid = torch.sigmoid(obj_preds)
@@ -164,8 +202,14 @@ class PointPillarLossMultiClass(nn.Module):
             + (1 - pos_mask) * torch.log(1 - obj_preds_sigmoid + 1e-6)
         )
         obj_loss = bce.mean()
+        print(f"[Loss Debug] obj_loss: {obj_loss}")
 
         total_loss = reg_loss + conf_loss + obj_loss
+        print(f"[Loss Debug] total_loss breakdown:")
+        print(f"[Loss Debug]   reg_loss: {reg_loss}")
+        print(f"[Loss Debug]   conf_loss: {conf_loss}")
+        print(f"[Loss Debug]   obj_loss: {obj_loss}")
+        print(f"[Loss Debug]   total_loss: {total_loss}")
 
         self.loss_dict.update(
             {

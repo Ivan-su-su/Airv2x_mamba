@@ -18,7 +18,7 @@ class How2comm(nn.Module):
     def __init__(self, args, args_pre):
         super(How2comm, self).__init__()
 
-        self.max_cav = 5
+        self.max_cav = 15
         self.communication = False
         self.round = 1
         if "communication" in args:
@@ -33,8 +33,7 @@ class How2comm(nn.Module):
         self.async_flag = True
         self.channel_fuse = nn.Conv2d(
             in_channels=64, out_channels=64, kernel_size=7, stride=1, padding=3
-        )
-
+        )#ToDo
         self.agg_mode = args["agg_operator"]["mode"]
         self.multi_scale = args["multi_scale"]
         self.how2comm = How2commPreprocess(args_pre, channel=64, delay=1)
@@ -174,7 +173,6 @@ class How2comm(nn.Module):
                             commu_loss = torch.zeros(1).to(x.device)
                     else:
                         communication_rates = torch.tensor(0).to(x.device)
-
                 batch_node_features = self.regroup(x, record_len)
                 batch_node_features_his = self.regroup(his, record_len)
 
@@ -202,7 +200,7 @@ class How2comm(nn.Module):
                         neighbor_feature_his = warp_affine_simple(
                             node_features_his, t_matrix[0, :, :, :], (H, W)
                         )
-
+                    
                     feature_shape = neighbor_feature.shape
                     padding_len = self.max_cav - feature_shape[0]
                     padding_feature = torch.zeros(

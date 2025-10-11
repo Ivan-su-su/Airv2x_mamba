@@ -57,9 +57,10 @@ def setup_for_distributed(is_master):
 
     builtin_print = __builtin__.print
 
-    def print(*args, **kwargs):
+    def distributed_print(*args, **kwargs):
         force = kwargs.pop("force", False)
         if is_master or force:
             builtin_print(*args, **kwargs)
 
-    __builtin__.print = print
+    # 避免与numba冲突，使用不同的函数名
+    __builtin__.print = distributed_print

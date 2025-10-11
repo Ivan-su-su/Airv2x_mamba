@@ -601,7 +601,6 @@ class BasePostprocessor(object):
         #     )
         # else:
         filter_range = self.params["anchor_args"]["cav_lidar_range"]
-
         box_utils.project_world_objects_airv2x(
             tmp_object_dict,
             output_dict,

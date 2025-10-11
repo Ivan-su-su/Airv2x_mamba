@@ -16,6 +16,7 @@ class ResNetModified(nn.Module):
         layers: List[int],
         layer_strides: List[int],
         num_filters: List[int],
+        input_channels = 128,
         zero_init_residual: bool = False,
         groups: int = 1,
         width_per_group: int = 64,
@@ -27,7 +28,7 @@ class ResNetModified(nn.Module):
             norm_layer = nn.BatchNorm2d
         self._norm_layer = norm_layer
 
-        self.inplanes = 128
+        self.inplanes = input_channels
         self.dilation = 1
         if replace_stride_with_dilation is None:
             replace_stride_with_dilation = [False, False, False]
@@ -56,7 +57,6 @@ class ResNetModified(nn.Module):
             stride=layer_strides[2],
             dilate=replace_stride_with_dilation[1],
         )
-
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
                 nn.init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="relu")
@@ -160,8 +160,8 @@ class ResNetBEVBackbone(nn.Module):
 
         else:
             upsample_strides = num_upsample_filters = []
-
-        self.resnet = ResNetModified(BasicBlock, layer_nums, layer_strides, num_filters)
+        
+        self.resnet = ResNetModified(BasicBlock, layer_nums, layer_strides, num_filters,input_channels)
 
         num_levels = len(layer_nums)
         self.num_levels = len(layer_nums)
@@ -207,7 +207,7 @@ class ResNetBEVBackbone(nn.Module):
         c_in = sum(num_upsample_filters)
         self.deblocks.append(
             nn.Sequential(
-                nn.ConvTranspose2d(c_in, c_in // 6, 2, 2, bias=False),
+                nn.ConvTranspose2d(c_in, c_in // 6 , 2, 2, bias=False),
                 nn.BatchNorm2d(c_in // 6, eps=1e-3, momentum=0.01),
                 nn.ReLU(),
             )
@@ -216,7 +216,7 @@ class ResNetBEVBackbone(nn.Module):
         self.num_bev_features = c_in
 
     def forward(self, spatial_features):
-        x = self.resnet(spatial_features)
+        x = self.resnet(spatial_features)  # tuple of features
         ups = []
 
         for i in range(self.num_levels):
@@ -224,7 +224,6 @@ class ResNetBEVBackbone(nn.Module):
                 ups.append(self.deblocks[i](x[i]))
             else:
                 ups.append(x[i])
-
         if len(ups) > 1:
             x = torch.cat(ups, dim=1)
         elif len(ups) == 1:
@@ -233,7 +232,8 @@ class ResNetBEVBackbone(nn.Module):
         if len(self.deblocks) > self.num_levels:
             x = self.deblocks[-1](x)
 
-        return x
+        spatial_features_2d = x
+        return spatial_features_2d
 
 
 class ReduceInfTC(nn.Module):
@@ -356,7 +356,7 @@ class FlowGenerator(nn.Module):
     def __init__(self, args):
         super(FlowGenerator, self).__init__()
         self.channel = 64
-        self.backbone = ResNetBEVBackbone(args["base_bev_backbone"], self.channel)
+        self.backbone = ResNetBEVBackbone(args['modality_fusion']["base_bev_backbone"], self.channel*2)
         self.pre_encoder = ReduceInfTC(128)
         self.mse_loss = nn.MSELoss()
 
@@ -404,7 +404,6 @@ class FlowGenerator(nn.Module):
             feat_target = colla_feat[:, self.channel :, :, :]
 
             offset, scale = self.pre_encoder(colla_fusion)
-
             feat_estimate_target = self.flow_warp_feats(feat_source, offset)
             feat_estimate_target = feat_estimate_target * scale
             final_list.append(torch.cat([ego_feat, feat_estimate_target], dim=0))

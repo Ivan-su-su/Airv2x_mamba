@@ -117,7 +117,7 @@ def load_saved_model(saved_path, model, epoch=None):
         return initial_epoch, model
 
 
-def load_model(saved_path, model, epoch=None, start_from_best=True):
+def load_model(saved_path, model, epoch=None, start_from_best=True, device=None):
     """
     Load saved model if existed
 
@@ -131,6 +131,8 @@ def load_model(saved_path, model, epoch=None, start_from_best=True):
         Specific epoch to load. If None, will load last epoch
     start_from_best : bool
         Whether to load the best performing model based on validation loss
+    device : str or torch.device, optional
+        Device to load the model to. If None, uses model's current device.
 
     Returns
     -------
@@ -138,6 +140,16 @@ def load_model(saved_path, model, epoch=None, start_from_best=True):
         Tuple of (epoch_id, loaded_model)
     """
     assert os.path.exists(saved_path), f"{saved_path} not found"
+    
+    # Determine device for loading
+    if device is None:
+        # Try to get device from model
+        try:
+            device = next(model.parameters()).device
+        except StopIteration:
+            device = "cpu"
+    
+    print(f"Loading model to device: {device}")
 
     def findLastCheckpoint(save_dir):
         file_list = glob.glob(os.path.join(save_dir, "*epoch*.pth"))
@@ -182,7 +194,7 @@ def load_model(saved_path, model, epoch=None, start_from_best=True):
         file_list = glob.glob(os.path.join(saved_path, "net_epoch_bestval_at*.pth"))
         if file_list:
             assert len(file_list) == 1
-            state_dict = torch.load(file_list[0], map_location="cpu")
+            state_dict = torch.load(file_list[0], map_location=device)
             # Map cdd weights to mdd if needed
             if "cdd" in state_dict:
                 state_dict["mdd"] = state_dict.pop("cdd")
@@ -212,41 +224,115 @@ def load_model(saved_path, model, epoch=None, start_from_best=True):
         if not os.path.exists(model_path):
             raise FileNotFoundError(f"Model file not found: {model_path}")
             
-        state_dict_ = torch.load(model_path, map_location="cuda:0")
+        state_dict_ = torch.load(model_path, map_location=device)
         state_dict = {}
         
+        # 打印检查点文件的键名以便调试
+        print(f"Available keys in checkpoint: {list(state_dict_.keys())}")
+        # 检查检查点文件的键名
+        if "model_state_dict" in state_dict_:
+            model_state_key = "model_state_dict"
+        elif "model_state" in state_dict_:
+            model_state_key = "model_state"
+        elif "state_dict" in state_dict_:
+            model_state_key = "state_dict"
+        elif "model" in state_dict_:
+            model_state_key = "model"
+        else:
+            # 如果没有找到预期的键，尝试直接使用整个state_dict_
+            print("Warning: No standard model state key found, using entire checkpoint as state dict")
+            model_state_key = None
+        
         # Convert data_parallel to model
-        for k in state_dict_:
+        source_dict = state_dict_[model_state_key] if model_state_key is not None else state_dict_
+        for k in source_dict:
             if k.startswith("module") and not k.startswith("module_list"):
-                state_dict[k[7:]] = state_dict_[k]
+                state_dict[k[7:]] = source_dict[k]
             else:
                 if k.startswith("cdd"):
                     # rename cdd to mdd
-                    state_dict["m" + k[1:]] = state_dict_[k]
+                    state_dict["m" + k[1:]] = source_dict[k]
                 else:
-                    state_dict[k] = state_dict_[k]
-                    
-        model_state_dict = model.state_dict()
+                    state_dict[k] = source_dict[k]
         
-        # Handle state dict mismatches
-        for k in state_dict:
-            if k in model_state_dict:
-                if state_dict[k].shape != model_state_dict[k].shape:
-                    print(
-                        f"Skip loading parameter {k}, required shape {model_state_dict[k].shape}, "
-                        f"loaded shape {state_dict[k].shape}"
-                    )
-                    state_dict[k] = model_state_dict[k]
-            else:
-                print(f"Drop parameter {k}")
+        # Load state dict with error handling
+        try:
+            model.load_state_dict(state_dict, strict=True)
+        except RuntimeError as e:
+            print(f"Warning: Failed to load state dict strictly: {e}")
+            print("Attempting to load with strict=False...")
+            try:
+                model.load_state_dict(state_dict, strict=False)
+            except RuntimeError as e2:
+                print(f"Warning: Failed to load state dict even with strict=False: {e2}")
+                print("Attempting to load compatible parameters only...")
+                # 只加载形状匹配的参数
+                model_state_dict = model.state_dict()
+                compatible_state_dict = {}
+                incompatible_keys = []
                 
-        for k in model_state_dict:
-            if k not in state_dict:
-                print(f"No param {k}")
-                state_dict[k] = model_state_dict[k]
+                for key, value in state_dict.items():
+                    if key in model_state_dict:
+                        if model_state_dict[key].shape == value.shape:
+                            compatible_state_dict[key] = value
+                        else:
+                            incompatible_keys.append(f"{key}: checkpoint {value.shape} vs model {model_state_dict[key].shape}")
+                    else:
+                        incompatible_keys.append(f"{key}: not found in model")
                 
-        model.load_state_dict(state_dict, strict=False)
+                print(f"Compatible parameters: {len(compatible_state_dict)}")
+                print(f"Incompatible parameters: {len(incompatible_keys)}")
+                if len(incompatible_keys) > 0:
+                    print("First 10 incompatible parameters:")
+                    for key in incompatible_keys[:10]:
+                        print(f"  {key}")
+                
+                model.load_state_dict(compatible_state_dict, strict=False)
+        
         return initial_epoch, model
+    #     model_state_dict = model.state_dict()
+        
+    #     # 打印一些调试信息
+    #     print(f"Checkpoint keys count: {len(state_dict)}")
+    #     print(f"Model keys count: {len(model_state_dict)}")
+        
+    #     # Handle state dict mismatches
+    #     missing_in_model = []
+    #     shape_mismatch = []
+    #     loaded_successfully = []
+        
+    #     for k in state_dict:
+    #         if k in model_state_dict:
+    #             if state_dict[k].shape != model_state_dict[k].shape:
+    #                 shape_mismatch.append(f"{k}: checkpoint {state_dict[k].shape} vs model {model_state_dict[k].shape}")
+    #                 print(
+    #                     f"Skip loading parameter {k}, required shape {model_state_dict[k].shape}, "
+    #                     f"loaded shape {state_dict[k].shape}"
+    #                 )
+    #                 state_dict[k] = model_state_dict[k]
+    #             else:
+    #                 loaded_successfully.append(k)
+    #         else:
+    #             missing_in_model.append(k)
+    #             print(f"Drop parameter {k}")
+                
+    #     for k in model_state_dict:
+    #         if k not in state_dict:
+    #             print(f"No param {k}")
+    #             state_dict[k] = model_state_dict[k]
+        
+    #     # 打印统计信息
+    #     print(f"Successfully loaded: {len(loaded_successfully)} keys")
+    #     print(f"Missing in model: {len(missing_in_model)} keys")
+    #     print(f"Shape mismatches: {len(shape_mismatch)} keys")
+        
+    #     if shape_mismatch:
+    #         print("Shape mismatch examples:")
+    #         for i, mismatch in enumerate(shape_mismatch[:5]):  # 只显示前5个
+    #             print(f"  {mismatch}")
+                
+    #     model.load_state_dict(state_dict, strict=False)
+    #     return initial_epoch, model
     else:
         print("No checkpoint found, starting from scratch")
         return 0, model
@@ -285,7 +371,7 @@ def setup_train(hypes):
     return full_path
 
 
-def create_model(hypes):
+def create_model(hypes, dataset = None):
     """
     Import the module "models/[model_name].py
 
@@ -321,7 +407,10 @@ def create_model(hypes):
             "called %s ignoring upper/lower case" % (model_filename, target_model_name)
         )
         exit(0)
-    instance = model(backbone_config)
+    if backbone_name == 'airv2x_mambafusion':
+        instance = model(backbone_config, dataset)
+    else:
+        instance = model(backbone_config)
     return instance
 
 

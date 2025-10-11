@@ -13,7 +13,7 @@ from opencood.models.how2comm_modules.mutual_communication import Communication
 class How2commPreprocess(nn.Module):
     def __init__(self, args, channel, delay):
         super(How2commPreprocess, self).__init__()
-        self.flow_flag = args["flow_flag"]
+        self.flow_flag = True
         self.channel = channel
         self.frame = args["fusion_args"]["frame"]
         self.delay = delay
@@ -72,7 +72,6 @@ class How2commPreprocess(nn.Module):
         feat_list = [[] for _ in range(B)]
         for bs in range(B):
             feat_list[bs] += [feat_curr[bs], feat_history[bs]]
-
         if self.flow_flag:
             feat_final, offset_loss = self.flow(feat_list)
         else:

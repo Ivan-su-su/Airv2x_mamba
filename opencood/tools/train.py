@@ -111,13 +111,20 @@ def validate_model(model, val_loader, criterion, epoch,
                                   desc="Validation", leave=False):
             if batch_data is None:
                 continue
-
             if "scope" in hypes["name"] or "how2comm" in hypes["name"]:
                 _batch_data = train_utils.to_device(batch_data[0], device)
                 batch_data  = train_utils.to_device(batch_data,   device)
                 with amp.autocast(enabled=scaler is not None):
                     out = model(batch_data)
                     loss = criterion(out, _batch_data["ego"]["label_dict"])
+            elif "mambafusion" in hypes.get("name", "").lower() or "mambafusion" in str(hypes.get("model", {}).get("core_method", "")):
+                # MambaFusion 特殊处理 - 使用AirV2X的检测loss
+                batch_data = train_utils.to_device(batch_data, device)
+                batch_data["ego"]["epoch"] = epoch
+                with amp.autocast(enabled=scaler is not None):
+                    out = model(batch_data["ego"])
+                    # 使用AirV2X标准的检测loss计算
+                    loss = criterion(out, batch_data["ego"]["label_dict"])
             else:
                 batch_data = train_utils.to_device(batch_data, device)
                 batch_data["ego"]["epoch"] = epoch
@@ -141,8 +148,10 @@ def main():
     
     # Build datasets
     print("Building datasets...")
-    train_dataset = build_dataset(hypes, visualize=False, train=True)
-    val_dataset = build_dataset(hypes, visualize=False, train=False)
+    # 对于MambaFusion模型，需要启用visualize模式以包含origin_lidar等字段
+    visualize_mode = "mambafusion" in hypes.get("name", "").lower() or "mambafusion" in str(hypes.get("model", {}).get("core_method", ""))
+    train_dataset = build_dataset(hypes, visualize=visualize_mode, train=True)
+    val_dataset = build_dataset(hypes, visualize=visualize_mode, train=False)
     
     # Create dataloaders
     train_loader = setup_dataloader(train_dataset, hypes, opt, is_train=True)
@@ -150,7 +159,14 @@ def main():
     
     # Create model
     print("Creating model...")
-    model = train_utils.create_model(hypes)
+    # 检查是否是 MambaFusion 模型
+    if "mambafusion" in hypes.get("name", "").lower() or "mambafusion" in str(hypes.get("model", {}).get("core_method", "")):
+        # MambaFusion 需要特殊的模型创建方式，传入训练数据集
+        from opencood.models.airv2x_mambafusion import Airv2xMambafusion
+        model = Airv2xMambafusion(hypes["model"]["args"], dataset=train_dataset, num_class=hypes["model"]["args"].get("num_class", 7))
+        print("Created MambaFusion model")
+    else:
+        model = train_utils.create_model(hypes)
     total_params = sum(p.nelement() for p in model.parameters())
     print(f"Total parameters: {total_params:,}")
     
@@ -199,12 +215,10 @@ def main():
         for i, batch_data in pbar:
             if batch_data is None:
                 continue
-                
             # Forward pass
             model.zero_grad()
             optimizer.zero_grad()
-            
-            if "scope" in hypes["name"] or "how2comm" in hypes["name"]:
+            if "scope" in hypes["name"] : #or "how2comm" in hypes["name"]
                 _batch_data = batch_data[0]
                 batch_data = train_utils.to_device(batch_data, device)
                 _batch_data = train_utils.to_device(_batch_data, device)
@@ -212,6 +226,15 @@ def main():
                 with amp.autocast(enabled=scaler is not None):
                     output_dict = model(batch_data)
                     loss = criterion(output_dict, _batch_data["ego"]["label_dict"])
+            elif "mambafusion" in hypes.get("name", "").lower() or "mambafusion" in str(hypes.get("model", {}).get("core_method", "")):
+                # MambaFusion 特殊处理 - 使用AirV2X的检测loss
+                batch_data = train_utils.to_device(batch_data, device)
+                batch_data["ego"]["epoch"] = epoch
+                
+                with amp.autocast(enabled=scaler is not None):
+                    output_dict = model(batch_data["ego"])
+                    # 使用AirV2X标准的检测loss计算
+                    loss = criterion(output_dict, batch_data["ego"]["label_dict"])
             else:
                 batch_data = train_utils.to_device(batch_data, device)
                 batch_data["ego"]["epoch"] = epoch
@@ -219,6 +242,9 @@ def main():
                 with amp.autocast(enabled=scaler is not None):
                     output_dict = model(batch_data["ego"])
                     loss = criterion(output_dict, batch_data["ego"]["label_dict"])
+                
+                # 前向传播后也清理一下显存
+                torch.cuda.empty_cache()
             
             # Backward pass with mixed precision support
             if scaler is not None:
@@ -228,6 +254,25 @@ def main():
             else:
                 loss.backward()
                 optimizer.step()
+            
+            # 每次反向传播后立即清理显存
+            torch.cuda.empty_cache()
+            import gc
+            gc.collect()  # 强制垃圾回收
+            
+            # 定期显存监控和强制清理
+            if i % 5 == 0:  # 每5步监控一次
+                memory_allocated = torch.cuda.memory_allocated() / 1024**3
+                memory_total = torch.cuda.get_device_properties(0).total_memory / 1024**3
+                memory_usage = memory_allocated / memory_total
+                print(f"[Memory] 第{i}步，使用率: {memory_usage:.1%}, 当前: {memory_allocated:.2f} GB")
+                
+                # 如果内存使用率过高，强制清理
+                if memory_usage > 0.85:
+                    torch.cuda.empty_cache()
+                    gc.collect()
+                    print(f"[Memory] 内存使用率过高({memory_usage:.1%})，强制清理显存")
+            
             
             # Update progress bar
             try:

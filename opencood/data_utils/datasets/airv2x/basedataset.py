@@ -244,19 +244,16 @@ class BaseDataset(Dataset):
         timestamp_key = self.return_timestamp_key(scenario_database, timestamp_index)
         # shuffle ego: traininig -> random, val -> no shuffle
         self.shuffle_ego()
-
         ego_cav_content = self.calc_dist_to_ego(scenario_database, timestamp_key)
         data = OrderedDict()
 
         # load files for all CAVs
         for cav_id, cav_content in scenario_database.items():
             # print(f"cav id: {cav_id}, ego: {cav_content['ego']}, agent type: {cav_content[0]['agent_type']}, cameras {cav_content[timestamp_key]['cameras']}")
-
             data[cav_id] = OrderedDict()
             data[cav_id]["ego"] = cav_content["ego"]
             data[cav_id]["agent_type"] = cav_content[timestamp_key]["agent_type"]
             data[cav_id]["distance_to_ego"] = cav_content["distance_to_ego"]
-
             agent_type = data[cav_id]["agent_type"]
             # calculate delay for this vehicle
             timestamp_delay = self.time_delay_calculation(cav_content["ego"])
@@ -567,6 +564,8 @@ class BaseDataset(Dataset):
 
         # calculate the distance, we use odometry (world coord) here
         for cav_id, cav_content in scenario_database.items():
+            # import pdb
+            # pdb.set_trace()
             # # for drone, we doesn't consider distance for now, ensure connection with cav
             # if cav_content[timestamp_key]["agent_type"] == "drone":
             #     distance = 0  # placeholder
@@ -592,7 +591,6 @@ class BaseDataset(Dataset):
             )
             cav_content["distance_to_ego"] = distance
             scenario_database.update({cav_id: cav_content})
-
         return ego_cav_content
 
     @staticmethod
@@ -643,7 +641,9 @@ class BaseDataset(Dataset):
         timestamp_keys = list(scenario_database.items())[0][1]
         # retrieve the correct index
         timestamp_key = list(timestamp_keys.items())[timestamp_index][0]
-
+        # timestamp_key = list(timestamp_keys.items())[timestamp_index][1]
+        # import pdb
+        # pdb.set_trace()
         return timestamp_key
 
     # @staticmethod

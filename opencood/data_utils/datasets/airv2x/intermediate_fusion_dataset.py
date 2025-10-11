@@ -54,7 +54,7 @@ import matplotlib.pyplot as plt
 
 import opencood.visualization.simple_plot3d.canvas_3d as canvas_3d
 import opencood.visualization.simple_plot3d.canvas_bev as canvas_bev
-
+from opencood.models.mambafusion_modules.point_feature_encoder import PointFeatureEncoder
 
 class IntermediateFusionDatasetAirv2x(basedataset.BaseDataset):
     """
@@ -132,7 +132,17 @@ class IntermediateFusionDatasetAirv2x(basedataset.BaseDataset):
             self.agent_order = ["rsu", "vehicle", "drone"]
         elif self.ego_type == "drone":
             self.agent_order = ["drone", "vehicle", "rsu"]
-            
+        # for mambafusion
+        if params['model']['core_method'] == 'airv2x_mambafusion':
+            self.point_cloud_range = np.array(params['POINT_CLOUD_RANGE'], dtype=np.float32)
+            self.point_feature_encoder = PointFeatureEncoder(
+                params['POINT_FEATURE_ENCODING'],
+                point_cloud_range=self.point_cloud_range
+            )
+            self.grid_size = np.array([360,360,32])  # 根据VOXEL_SIZE计算得出
+            self.voxel_size =  (self.point_cloud_range[3:6] - self.point_cloud_range[0:3])/ self.grid_size 
+            self.depth_downsample_factor = None
+            self.class_names =  ['car', 'truck', 'construction_vehicle', 'bus', 'trailer', 'barrier', 'motorcycle', 'bicycle', 'pedestrian', 'traffic_cone']
     
     def __getitem__(self, idx):
         # Default order if none specified
@@ -141,7 +151,6 @@ class IntermediateFusionDatasetAirv2x(basedataset.BaseDataset):
         base_data_dict, scenario_index, timestamp_key = self.retrieve_base_data(
             idx, cur_ego_pos_flag=self.cur_ego_pose_flag
         )
-
         processed_data_dict = OrderedDict()
         processed_data_dict["ego"] = {}
 
@@ -209,13 +218,11 @@ class IntermediateFusionDatasetAirv2x(basedataset.BaseDataset):
                 too_far.append(cav_id)
                 continue
                 
-            selected_cav_processed = self.get_item_single_car(
+            selected_cav_processed, img_process_info= self.get_item_single_car(
                 selected_cav_base, ego_lidar_pose
             )
-            
             # Add data to the appropriate agent collection
             current_agent = agent_data[agent_type]
-            
             current_agent["object_stack"].append(selected_cav_processed["object_bbx_center"])
             current_agent["object_id_stack"].append(selected_cav_processed["object_ids"])
             current_agent["class_id_stack"].append(selected_cav_processed["class_ids"])
@@ -226,6 +233,7 @@ class IntermediateFusionDatasetAirv2x(basedataset.BaseDataset):
             current_agent["processed_lidar_features"].append(selected_cav_processed["processed_lidar_features"])
             current_agent["cam_inputs"].append(selected_cav_processed["cam_inputs"])
             current_agent["original_lidar_vis"].append(selected_cav_processed["lidar_np"])
+            current_agent["img_process_info"] = img_process_info #mambafusion
             
             # Get seg_label from ego vehicle
             if selected_cav_base["ego"]:
@@ -270,6 +278,7 @@ class IntermediateFusionDatasetAirv2x(basedataset.BaseDataset):
                 if field in ['object_stack', 'object_id_stack', 'class_id_stack']:
                     current_agent[field] = list(chain.from_iterable(current_agent[field]))
             
+            
             # Add to combined data collections in requested order
             all_object_stack.extend(current_agent["object_stack"])
             all_object_id_stack.extend(current_agent["object_id_stack"])
@@ -294,7 +303,8 @@ class IntermediateFusionDatasetAirv2x(basedataset.BaseDataset):
             else:
                 current_agent["merged_lidar_features_dict"] = {}
                 current_agent["merged_cam_inputs_dict"] = {}
-        
+            for d, pi in zip(current_agent['cam_inputs'], current_agent['img_process_info']):
+                d['img_process_info'] = pi
         # Ensure unique IDs (preserve order)
         retain_cav_ids = list(unique_everseen(retain_cav_ids))
         
@@ -417,7 +427,6 @@ class IntermediateFusionDatasetAirv2x(basedataset.BaseDataset):
                 )
             else:
                 processed_data_dict["ego"][f"origin_lidar_{type_abb_map[agent_type]}"] = np.zeros((0, 4))
-        
         return processed_data_dict
 
 
@@ -505,6 +514,7 @@ class IntermediateFusionDatasetAirv2x(basedataset.BaseDataset):
         extrinsics = []
         post_rots = []
         post_trans = []
+        img_process_info = []
 
         for idx, img in enumerate(camera_data_list):
             camera_to_lidar = camera_to_lidar_matrix[idx]
@@ -535,7 +545,6 @@ class IntermediateFusionDatasetAirv2x(basedataset.BaseDataset):
                 resize, resize_dims, crop, flip, rotate = camera_utils.sample_augmentation(
                     self.drone_data_aug_conf, self.train
                 )
-            
             img_src, post_rot2, post_tran2 = camera_utils.img_transform(
                 img_src,
                 post_rot,
@@ -565,6 +574,7 @@ class IntermediateFusionDatasetAirv2x(basedataset.BaseDataset):
             trans.append(tran)
             post_rots.append(post_rot)
             post_trans.append(post_tran)
+            img_process_info.append([resize,crop,False,0])
             
         selected_cav_processed.update(
             {
@@ -580,8 +590,6 @@ class IntermediateFusionDatasetAirv2x(basedataset.BaseDataset):
                 }
             }
         )
-
-
         
         # if agent_type == "drone":
         #     lidar_np = []
@@ -615,7 +623,7 @@ class IntermediateFusionDatasetAirv2x(basedataset.BaseDataset):
                 "class_ids": class_ids,
             }
         )
-        return selected_cav_processed
+        return selected_cav_processed,img_process_info #for mambafusion
 
     def collate_batch_train(self, batch):
         # Intermediate fusion is different the other two
@@ -866,7 +874,6 @@ class IntermediateFusionDatasetAirv2x(basedataset.BaseDataset):
                 "ego_lidar_pose_list": ego_lidar_pose_list,
             }
         )
-
         if self.visualize:
             origin_lidars_veh = np.array(
                 downsample_lidar_minimum(pcd_np_list=origin_lidar_veh_list)

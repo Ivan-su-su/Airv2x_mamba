@@ -108,9 +108,15 @@ def parse_arguments() -> argparse.Namespace:
         default="config.yaml",
         help="Path to config file"
     )
+    parser.add_argument(
+        "--gpu_id",
+        type=int,
+        default=0,
+        help="GPU ID to use (default: 0)"
+    )
     return parser.parse_args()
 
-def setup_model(hypes: dict, device: torch.device) -> torch.nn.Module:
+def setup_model(hypes: dict, device: torch.device, dataset = None) -> torch.nn.Module:
     """Create and setup the model.
     
     Args:
@@ -121,7 +127,7 @@ def setup_model(hypes: dict, device: torch.device) -> torch.nn.Module:
         Initialized model
     """
     print("Creating Model")
-    model = train_utils.create_model(hypes)
+    model = train_utils.create_model(hypes, dataset)
     model.to(device)
     return model
 
@@ -280,8 +286,13 @@ def main():
     
     # Load config and setup
     hypes = yaml_utils.load_yaml(None, opt)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    
+    # 指定使用特定的GPU设备
+    if torch.cuda.is_available():
+        device = torch.device(f"cuda:{opt.gpu_id}")
+        print(f"Using GPU {opt.gpu_id}")
+    else:
+        device = torch.device("cpu")
+        print("CUDA not available, using CPU")
     # Update communication threshold if specified
     if opt.comm_thre is not None:
         hypes["model"]["args"]["fusion_args"]["communication"]["thre"] = opt.comm_thre
@@ -307,26 +318,26 @@ def main():
     print(f"Left hand visualizing: {left_hand}")
 
     # Build dataset and dataloader
+    
     print("Building Dataset")
     dataset = build_dataset(hypes, visualize=True, train=False)
     print(f"{len(dataset)} samples found")
-
     dataloader = DataLoader(
         dataset,
         batch_size=1,
-        num_workers=4,
+        num_workers=0, #TODO
         collate_fn=dataset.collate_batch_test,
         shuffle=False,
         pin_memory=False,
         drop_last=False
     )
-
     # Setup model
-    model = setup_model(hypes, device)
+    import pdb; pdb.set_trace()
+    model = setup_model(hypes, device, dataset)
+    
     epoch_id, model = load_model_checkpoint(
         model, opt.model_dir, opt.eval_epoch, opt.eval_best_epoch, device
     )
-
     # Initialize statistics tracking
     result_stat_init = lambda: {
         th: initialize_result_stats() for th in [0.3, 0.5, 0.7]
@@ -341,12 +352,17 @@ def main():
             r'(\d{4}(?:_\d{2}){5})', 
             batch_data['ego']['metadata_path_list'][0]
         )
+        # 采用mini batch 所以时间戳的辨识需要修改 后续需要进行修改
+        # # TODO
+        # timestamp_match = re.search(
+        #         r'(timestamp_\d+)', 
+        #         batch_data['ego']['metadata_path_list'][0]
+        # )
         if not timestamp_match:
             raise ValueError("Timestamp not found in metadata path")
         timestamp = timestamp_match.group(1)
         
         result_stat = result_stat_dict[timestamp]
-
         with torch.no_grad():
             # Process batch based on fusion method
             outputs = process_batch(batch_data, model, dataset, opt.fusion_method, device)
@@ -401,6 +417,7 @@ def main():
                     i,
                     left_hand
                 )
+        print("-------------finish_one_epoch-------------------")
 
     # Calculate final metrics
     combined_stat = inference_utils.combine_stat_by_scenarios(result_stat_dict)

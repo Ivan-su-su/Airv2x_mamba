@@ -1,4 +1,5 @@
 import torch
+import torch.nn.functional as F
 from torch import nn
 from opencood.models.mambafusion_modules.ops.bev_pool import bev_pool
 from opencood.models.mambafusion_modules.backbones_3d.local_mamba import GlobalMamba
@@ -624,7 +625,8 @@ class LSSTransform_Lite(nn.Module):
                 # 生成[360, 360, 2]的坐标
                 feature_map_size = self.bev_size // self.mamba_downsample_scale
                 
-                # 按照feature_map_size生成坐标，与x_down的尺寸匹配
+                # 按照原始MambaFusion的方式生成坐标，使用固定的360x360网格
+                # 注意：这里仍然使用360x360，因为后续会resize到200x704
                 x_coord = torch.stack(torch.meshgrid([torch.arange(0, feature_map_size), torch.arange(0, feature_map_size)]), dim=-1).reshape(-1, 2)
                 x_coord = torch.cat([torch.zeros_like(x_coord[..., :1]), torch.zeros_like(x_coord[..., :1]), x_coord], dim=-1)
                 x_coord = x_coord * self.mamba_downsample_scale  # 缩放到原始尺寸
@@ -675,7 +677,7 @@ class LSSTransform_Lite(nn.Module):
                 else:
                     # 如果没有pillar_features，跳过Mamba处理
                     pass
-            
+            # Resize to target output shape (200, 704)
             return x
 
         # 如果指定了agent，只处理该agent
@@ -685,7 +687,8 @@ class LSSTransform_Lite(nn.Module):
                 ensure_cam_mats(batch_dict[agent])
                 # 处理单个agent
                 bev_feature = process_single_agent(batch_dict[agent], agent)
-                batch_dict[agent]['spatial_features_img'] = bev_feature.permute(0,1,3,2).contiguous()
+                bev_feature = F.interpolate(bev_feature, size=(200, 704), mode='bilinear', align_corners=False)
+                batch_dict[agent]['spatial_features_img'] = bev_feature
                 return batch_dict
             else:
                 raise KeyError(f'Agent {agent} not found or missing image_fpn')

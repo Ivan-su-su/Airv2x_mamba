@@ -207,10 +207,12 @@ class Airv2xMambafusion(Detector3DTemplate):
         # AirV2X需要agent循环处理，但要保持数据流一致
         print("available_agents:",available_agents)
         for cur_module, model_name in zip(self.module_list, self.module_topology):
-            if model_name in ['vfe', 'backbone_3d', 'mm_backbone', 'vtransform']:
+            if model_name in ['vfe', 'backbone_3d', 'mm_backbone', 'map_to_bev_module','vtransform']:
                 # 这些模块需要agent参数，但只处理有效的agent
                 for agent in available_agents:
                     batch_dict = cur_module(batch_dict, agent)
+            elif model_name in ['fuser']:
+                batch_dict = cur_module(batch_dict, available_agents)
             else:
                 # 其他模块不需要agent参数
                 batch_dict = cur_module(batch_dict)

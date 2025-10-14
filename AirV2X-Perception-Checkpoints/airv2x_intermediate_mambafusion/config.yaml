@@ -246,7 +246,7 @@ model:
           NUM_LAYERS: 4
           DEPTHS: [2, 2, 2, 2]
           LAYER_DOWN_SCALES: [[[2, 2, 2], [2, 2, 2]], [[2, 2, 2], [2, 2, 2]], [[2, 2, 2], [2, 2, 2]], [[2, 2, 2], [2, 2, 2]]]
-          WINDOW_SHAPE: [[13, 13, 32], [13, 13, 16], [13, 13, 8], [13, 13, 4]]
+          WINDOW_SHAPE: [[16, 25, 32], [16, 25, 16], [16, 25, 8], [16, 25, 4]]
           GROUP_SIZE: [4096, 2048, 1024, 512]
           DIRECTION: ['x', 'y']
           DIFF_SCALE: 0.2
@@ -297,7 +297,7 @@ model:
           sparse_shape: [704, 200, 1]  # 减少LiDAR特征图尺寸
           d_model: [64]
           set_info: [[90, 2]]
-          window_shape: [[30, 30, 1]]
+          window_shape: [[32, 25, 1]]
           hybrid_factor: [1, 1, 1] # x, y, z
           shifts_list: [[[0, 0, 0], [15, 15, 0]]]
         
@@ -360,10 +360,10 @@ model:
       FUSER:
         NAME: ConvFuser
         # USE_MERGE_AFTER: True
-        # USE_VMAMBA: True
-        IN_CHANNEL: 64
+        USE_VMAMBA: True
+        IN_CHANNEL: 144
         OUT_CHANNEL: 128
-        LIDAR_ONLY: True
+        LIDAR_ONLY: False
 
       MAP_TO_BEV:
         NAME: PointPillarScatter3d

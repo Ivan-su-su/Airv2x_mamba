@@ -1139,11 +1139,12 @@ class MambaFusion(nn.Module):
                         batch_spatial_features = self._recover_image(pillar_features=output[voxel_num:], # 前面分开norm，这里+1？
                                                                     coords=patch_info[f'voxel_coors_stage{self.stage_num - 1}'], indices=i)
                     batch_dict['image_features'].append(batch_spatial_features) # [24, 128, 32, 88]
+
         if self.use_winmamba and h_size != 1:
             lidar_sparse = spconv.SparseConvTensor(
                             features=output[:voxel_num],
                             indices=batch_dict['voxel_coords'],
-                            spatial_shape=[h_size, 360, 360],
+                            spatial_shape=[h_size, 704, 200],
                             batch_size=batch_dict['batch_size']
                         )
             lidar_sparse, _ = self.dow5(lidar_sparse)
